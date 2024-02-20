@@ -1,34 +1,30 @@
-import pandas as pd
-from etl.extraction import print_csv_schema
-from etl.transformation import transform_clients_data, transform_loans_data
-from etl.loading import load_data
+import os
+from pipeline.extraction import download_csv
+from infra.db_handlers import create_connection_pool, ingest_data_from_csv
 
 def main():
-    try:
-        # Step 1: Extraction
-        print("Extracting data from CSV files and printing schema...")
-        clients_csv_url = "https://raw.githubusercontent.com/p-beraldin/lending-data-engineer-test/main/files/clients.csv"
-        loans_csv_url = "https://raw.githubusercontent.com/p-beraldin/lending-data-engineer-test/main/files/loans.csv"
+    # Create a connection pool
+    db_url = os.getenv('db_url')
+    create_connection_pool(db_url)
 
-        clients_df = pd.read_csv(clients_csv_url, dtype={'batch': str})  # Specify 'batch' column as string due to mixed types
-        loans_df = pd.read_csv(loans_csv_url, dtype={'user_id': int, 'loan_id': int})  # Specify data types for specific columns
+    # URLs of the raw CSV files on GitHub
+    clients_csv_url = "https://raw.githubusercontent.com/p-beraldin/lending-data-engineer-test/main/files/clients.csv"
+    loans_csv_url = "https://raw.githubusercontent.com/p-beraldin/lending-data-engineer-test/main/files/loans.csv"
 
-        print_csv_schema(clients_df)
-        print_csv_schema(loans_df)
+    # Local file paths to save the downloaded CSV files
+    clients_csv = "infra/data/clients.csv"
+    loans_csv = "infra/data/loans.csv"
 
-        # Step 2: Transformation
-        print("Transforming data...")
-        clients_df = transform_clients_data(clients_df)
-        loans_df = transform_loans_data(loans_df)
+    # Download the CSV files
+    download_csv(clients_csv_url, clients_csv)
+    download_csv(loans_csv_url, loans_csv)
 
-        # Step 3: Loading
-        print("Loading transformed data into PostgreSQL database...")
-        load_data(clients_df, 'clients')  # Load clients data
-        load_data(loans_df, 'loans')  # Load loans data
+    # Ingest data from CSV files into the database
+    num_rows_inserted_clients = ingest_data_from_csv(clients_csv, "clients", db_url)
+    print(f"Number of new rows inserted into clients table: {num_rows_inserted_clients}")
 
-        print("ETL process completed successfully.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    num_rows_inserted_loans = ingest_data_from_csv(loans_csv, "loans", db_url)
+    print(f"Number of new rows inserted into loans table: {num_rows_inserted_loans}")
 
 if __name__ == "__main__":
     main()
